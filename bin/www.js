@@ -4,9 +4,11 @@
  * Module dependencies.
  */
 
-var app = require('../app');
-var debug = require('debug')('vulnerable-filehoster:server');
-var http = require('http');
+import app from '../app.js';
+import debugFn from 'debug';
+import http from 'http';
+
+var debug = debugFn('vulnerable-filehoster:server');
 
 /**
  * Get port from environment and store in Express.
