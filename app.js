@@ -133,6 +133,25 @@ app.get("/api/download/:uploadId", (req, res) => {
     res.type(fileUpload.mimeType).send(fileBytes);
 });
 
+app.get("/api/admin/cleanup", (req, res) => {
+    const user = getUserFromSessionCookie(req);
+
+    if(user === undefined) {
+        return res.status(401).send("login required");
+    }
+
+    if(!user.isAdmin) {
+        return res.status(401).send("only admins may do this");
+    }
+
+    db.prepare("DELETE FROM uploads").run();
+
+    const files = fs.readdirSync("uploads/");
+    files.forEach(filename => fs.unlinkSync("uploads/" + filename));
+
+    return res.send("all uploads deleted");
+});
+
 function hashPassword(password) {
     // MD5 is bad. Really bad. Never ever hash passwords with MD5!
     // And allways salt your hashes!
