@@ -8,7 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS uploads (
     ID INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
+    storageLocation TEXT NOT NULL,
     originalFileName TEXT,
+    size INTEGER,
+    mimeType TEXT,
     uploadDate TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
