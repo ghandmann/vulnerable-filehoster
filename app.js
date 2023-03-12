@@ -3,6 +3,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import logger from 'morgan';
+import fs from 'fs';
+import multer from 'multer';
+const upload = multer({ dest: "uploads/"});
 
 import indexRouter from './routes/index.js';
 import usersRouter from './routes/users.js';
@@ -89,6 +92,47 @@ app.get("/api/profile", (req, res) => {
     return res.send({ id: user.id, email: user.email, isAdmin: user.isAdmin });
 });
 
+app.post("/api/upload", upload.single("file"), (req, res) => {
+    const uploadedFile = req.file;
+
+    const user = getUserFromSessionCookie(req);
+
+    if(user === undefined) {
+        return res.status(401).send("only logged in users can upload files");
+    }
+
+    const statement = db.prepare("INSERT INTO uploads (user_id, storageLocation, originalFileName, size, mimeType) VALUES (?, ?, ?, ?, ?)");
+
+    // 'uploadedFile.originalname' is a "hidden" user input that is not validated/escaped!
+    // An attacker may choose to send any arbitrary string alongside the uploaded file.
+    //
+    // See: https://curl.se/docs/manpage.html#-F
+    //      You can also explicitly change the name field of a file upload part by setting filename=, like this:
+    //      curl -F "file=@localfile;filename=nameinpost" example.com
+    statement.run(user.id, uploadedFile.path, uploadedFile.originalname, uploadedFile.size, uploadedFile.mimetype);
+
+    return res.send("file upload successfull");
+});
+
+app.get("/api/download/:uploadId", (req, res) => {
+    const { uploadId } = req.params;
+
+    if(uploadId === undefined) {
+        return res.send(404).send("missing upload id");
+    }
+
+    const statement = db.prepare("SELECT * FROM uploads WHERE id = ?");
+    const fileUpload = statement.get(uploadId);
+
+    if(fileUpload === undefined) {
+        return res.send(404).send("invalid upload id");
+    }
+
+    const fileBytes = fs.readFileSync(fileUpload.storageLocation);
+
+    res.type(fileUpload.mimeType).send(fileBytes);
+});
+
 function hashPassword(password) {
     // MD5 is bad. Really bad. Never ever hash passwords with MD5!
     // And allways salt your hashes!
@@ -101,10 +145,6 @@ function hashPassword(password) {
 
 function getUserFromSessionCookie(req) {
     const loggedInUserId = req.cookies.loggedInUserId;
-
-    if(loggedInUserId === undefined) {
-        return res.status(401).send("unauthorized");
-    }
 
     const statement = db.prepare("SELECT * FROM users WHERE id = ?");
     const user = statement.get(loggedInUserId);
