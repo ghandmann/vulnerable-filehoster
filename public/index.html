@@ -1,13 +1,248 @@
-<html>
+<!doctype html>
+<html lang="en">
 
 <head>
-  <title>Express</title>
-  <link rel="stylesheet" href="/stylesheets/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vulnerable Filehoster</title>
+  <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css" />
+
+  <script src="/bootstrap/js/bootstrap.min.js"></script>
 </head>
 
 <body>
-  <h1>Express</h1>
-  <p>Welcome to Express</p>
+  <header>
+    <nav class="navbar navbar-expand-lg bg-body-tertiary">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#">VulnerableFilehoster</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          </ul>
+          <div class="d-none" id="user-profile">
+            <span class="email"></span>
+            <a class="btn logout btn-primary">Logout</a>
+          </div>
+          <form id="login-form" class="d-flex" role="search" method="post" action="/api/login">
+            <input class="form-control me-2" type="text" name="email" placeholder="email" >
+            <input class="form-control me-2" type="password" name="password" placeholder="password" >
+            <div class="btn-group">
+              <button class="btn btn-outline-success" type="submit">Login</button>
+              <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#register-modal">Register</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <div class="container">
+    <div id="not-logged-in-banner">
+      <h1>Hello, world!</h1>
+      <p>Feel free to login or register in order to upload files to the VulnerableFilehoster!</p>
+    </div>
+    <div class="d-none" id="logged-in-container">
+      <h1>Welcome to VulnerableFilehoster!</h1>
+
+      <form class="form" method="post" action="/api/upload" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <button type="submit">Upload</button>
+      </form>
+
+      <table class="table table-striped" id="uploaded-files-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Original File Name</th>
+            <th>Size</th>
+            <th>Upload Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="register-modal" class="modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form class="form">
+          <div class="modal-header">
+            <h5 class="modal-title">Register Account</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <input class="form-control" type="text" name="email" placeholder="eMail">
+              <input class="form-control" type="password" name="password" placeholder="password">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="register-button">Register</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast position-fixed bottom-0 end-0" role="alert" aria-live="assertive" aria-atomic="true" id="register-success-toast">
+    <div class="toast-header bg-success-subtle">
+      <h4>Welcome on board!</h4>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+    <div class="toast-body">
+      Registration successfull, you can now login!
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () =>  {
+      document.querySelector("#user-profile .btn.logout").addEventListener("click", logout);
+      document.querySelector("#register-button").addEventListener("click", registerUser);
+
+      document.addEventListener("UserLoggedIn", async (e) => {
+        const userProfile = e.detail;
+        showLoggedInUserInNavbar(userProfile);
+        showMainScreen();
+
+        const uploads = await fetchUploadedFiles();
+        renderUploadedFiles(uploads);
+      });
+
+      await checkIfLoggedIn();
+    });
+
+    // Tries to get the profile for the logged in user
+    // Returns undefined if the user is not logged in.
+    async function checkIfLoggedIn() {
+      const profileResponse = await fetch("/api/profile");
+      if(profileResponse.status != 200) {
+        return undefined;
+      }
+
+      const profile = await profileResponse.json();
+
+      const loggedInEvent = new CustomEvent("UserLoggedIn", { detail: profile });
+      document.dispatchEvent(loggedInEvent);
+    }
+
+    function showLoggedInUserInNavbar(userProfile) {
+      const loginForm = document.getElementById("login-form");
+      loginForm.classList.add("d-none");
+
+      const profileDiv = document.getElementById("user-profile");
+      profileDiv.classList.remove("d-none");
+
+      //  
+      profileDiv.querySelector(".email").innerHTML = `Logged in as ${userProfile.email}`;
+    }
+
+    function logout() {
+      // remove the session cookie
+      document.cookie = "loggedInUserId=null;max-age=0";
+      document.location.reload();
+    }
+
+    function showMainScreen() {
+      document.querySelector("#not-logged-in-banner").classList.add("d-none");
+      document.querySelector("#logged-in-container").classList.remove("d-none");
+    }
+
+    async function fetchUploadedFiles() {
+      const response = await fetch("/api/uploads");
+
+      if(response.status !== 200) {
+        return undefined;
+      }
+
+      return await response.json();
+    }
+
+    function renderUploadedFiles(uploadedFiles) {
+      const table = document.querySelector("#uploaded-files-table tbody")
+
+      // clear all entries
+      table.querySelectorAll("tr").forEach((el) => el.remove());
+
+      uploadedFiles.forEach((upload) => {
+        const tr = document.createElement("tr");
+
+        const idColumn = document.createElement("td");
+        idColumn.textContent = upload.ID;
+
+        const originalNameColumn = document.createElement("td");
+        // whooopsie, somebody used innerHTML here... ;)
+        originalNameColumn.innerHTML = upload.originalFileName;
+
+        const uploadDateColumn = document.createElement("td");
+        uploadDateColumn.textContent = upload.uploadDate;
+
+        const sizeColumn = document.createElement("td");
+        const formattedNumber = new Intl.NumberFormat("de-DE").format(upload.size / (1024*1024))
+        sizeColumn.textContent = `${formattedNumber} mb`;
+
+        const actionColumn = document.createElement("td");
+        const downloadButton = document.createElement("a");
+        downloadButton.classList.add("btn", "btn-sm", "btn-primary");
+        downloadButton.href = "/api/download/" + upload.ID;
+        downloadButton.textContent = "Download";
+        actionColumn.append(downloadButton);
+
+        const deleteButton = document.createElement("a");
+        deleteButton.classList.add("btn", "btn-sm", "btn-danger");
+        deleteButton.textContent = "Delete";
+        deleteButton.addEventListener("click", async () => { 
+          deleteUpload(upload.ID);
+          const uploads = await fetchUploadedFiles();
+          renderUploadedFiles(uploads);
+        });
+        actionColumn.append(deleteButton);
+
+        tr.append(idColumn);
+        tr.append(originalNameColumn);
+        tr.append(sizeColumn);
+        tr.append(uploadDateColumn);
+        tr.append(actionColumn);
+
+        table.append(tr);
+      });
+    }
+
+    async function deleteUpload(uploadId) {
+      const response = await fetch("/api/upload/" + uploadId, { method: "DELETE" });
+
+      return response.status == 200;
+    }
+
+    async function registerUser() {
+      const email = document.querySelector('#register-modal input[name="email"]').value;
+      const password = document.querySelector('#register-modal input[name="password"]').value;
+      const payload = { email, password };
+
+      const response = await fetch("/api/register", {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+        }
+      });
+
+      if(response.status !== 200) {
+        console.log("Error: failed to register");
+        return;
+      }
+      
+      const modalElement = document.querySelector("#register-modal");
+      const modal = bootstrap.Modal.getInstance(modalElement);
+      modal.hide();
+
+      const toast = new bootstrap.Toast("#register-success-toast");
+      toast.show();
+    }
+  </script>
 </body>
 
 </html>
