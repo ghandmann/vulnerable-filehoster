@@ -33,6 +33,7 @@ app.use('/users', usersRouter);
 app.post("/api/login", (req, res) => {
     const { email, password } = req.body;
 
+    // SHOWCASE:
     // The next line contains a serious SQL injection vulnerarble.
     // Although it seems like there are prepared statments used here, 
     // in reality which just concat user input (email) to the raw SQL.
@@ -52,18 +53,20 @@ app.post("/api/login", (req, res) => {
     
     const user = result[0];
 
+    // SHOWCASE:
     // Here is a timing attack hidden, since we are not using a
     // constant time comparison
     if(hashedPassword !== user.password) {
         return res.status(401).send("invalid login");
     }
 
+    // SHOWCASE:
     // Just a simple Cookie containing the userId is bad.
     // This should be a digitally signed cookie to detect tampering
     // on the client side.
-    res.cookie("loggedInUserId", userId);
+    res.cookie("loggedInUserId", user.id);
 
-    return res.send("login successfull");
+    return res.redirect("/");
 });
 
 app.post("/api/register", (req, res) => {
@@ -101,15 +104,22 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
         return res.status(401).send("only logged in users can upload files");
     }
 
+    // SHOWCASE:
+    // To support non ascii filenames we decode URI escape sequences
+    // with catastrophic consequences. This way it is easy to inject HTML
+    // via the client provided `originalname`
+    const originalFileName = decodeURIComponent(uploadedFile.originalname);
+
     const statement = db.prepare("INSERT INTO uploads (user_id, storageLocation, originalFileName, size, mimeType) VALUES (?, ?, ?, ?, ?)");
 
+    // SHOWCASE:
     // 'uploadedFile.originalname' is a "hidden" user input that is not validated/escaped!
     // An attacker may choose to send any arbitrary string alongside the uploaded file.
     //
     // See: https://curl.se/docs/manpage.html#-F
     //      You can also explicitly change the name field of a file upload part by setting filename=, like this:
     //      curl -F "file=@localfile;filename=nameinpost" example.com
-    statement.run(user.id, uploadedFile.path, uploadedFile.originalname, uploadedFile.size, uploadedFile.mimetype);
+    statement.run(user.id, uploadedFile.path, originalFileName, uploadedFile.size, uploadedFile.mimetype);
 
     return res.send("file upload successfull");
 });
@@ -133,6 +143,42 @@ app.get("/api/download/:uploadId", (req, res) => {
     res.type(fileUpload.mimeType).send(fileBytes);
 });
 
+app.delete("/api/upload/:uploadId", (req, res) => {
+    const { uploadId } = req.params;
+
+    if(uploadId === undefined) {
+        return res.send(404).send("missing upload id");
+    }
+
+    const user = getUserFromSessionCookie(req);
+
+    if(user === undefined) {
+        return res.status(401).send("login required"); 
+    }
+
+    // SHOWCASE:
+    // Well, we could check, if the upload the user would like to delete
+    // actually belongs to this user...but that would be way to complex... ;)
+    // This any user can delete any upload as long as he knows the id
+    const statement = db.prepare("DELETE FROM uploads WHERE id = ?");  // AND user_id = ?
+    statement.run(uploadId);
+
+    return res.status(200).send("upload deleted");
+});
+
+app.get("/api/uploads", (req, res) => {
+    const user = getUserFromSessionCookie(req);
+
+    if(user === undefined) {
+        return res.status(401).send("login required"); 
+    }
+
+    const statement = db.prepare("SELECT * FROM uploads WHERE user_id = ?");
+    const uploads = statement.all(user.id);
+
+    return res.send(uploads);
+});
+
 app.get("/api/admin/cleanup", (req, res) => {
     const user = getUserFromSessionCookie(req);
 
@@ -153,6 +199,7 @@ app.get("/api/admin/cleanup", (req, res) => {
 });
 
 function hashPassword(password) {
+    // SHOWCASE:
     // MD5 is bad. Really bad. Never ever hash passwords with MD5!
     // And allways salt your hashes!
     // See https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
