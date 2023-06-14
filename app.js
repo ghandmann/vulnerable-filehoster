@@ -6,6 +6,7 @@ import logger from 'morgan';
 import fs from 'fs';
 import multer from 'multer';
 const upload = multer({ dest: "uploads/"});
+import {exec} from "child_process";
 
 import indexRouter from './routes/index.js';
 import usersRouter from './routes/users.js';
@@ -196,6 +197,24 @@ app.get("/api/admin/cleanup", (req, res) => {
     files.forEach(filename => fs.unlinkSync("uploads/" + filename));
 
     return res.send("all uploads deleted");
+});
+
+app.get("/list-directory", (req, res) => {
+    const directory = req.query.directory;
+
+    // SHOWCASE
+    // DANGER DANGER DANGER DANGER DANGER DANGER
+    // The exec command starts a new shell and executes the command in this shell.
+    // A part of the command is user-controlled, therefore it is easy to launch a remote shell
+    // (or any other arbitrary command on the server)
+    // DO NOT DO THIS!
+    exec("ls -latr " + directory, { shell: "/bin/bash" }, (error, stdout, stderr) => {
+        if(error || stderr) {
+            return res.send("failed to start process");
+        }
+
+        res.send(stdout);
+    });
 });
 
 function hashPassword(password) {

